@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.leclowndu93150.notenoughchesttextures.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "notenoughchesttextures.refmap.json",
+  "mixins": [
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
