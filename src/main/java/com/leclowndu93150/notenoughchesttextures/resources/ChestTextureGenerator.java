@@ -85,6 +85,9 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
                         ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
                                 "textures/entity/chest/base/chest_" + variant.replace("trapped_", "") + ".png");
 
+                        manager.listResources("textures/entity/chest/base", file -> file.getPath().endsWith(".png"))
+                                .forEach((loc, res) -> LOGGER.info("Found resource: {}", loc));
+
                         /*
                         if (!manager.getResource(baseLoc).isPresent()) {
                             LOGGER.warn("Base chest texture not found: " + baseLoc);
