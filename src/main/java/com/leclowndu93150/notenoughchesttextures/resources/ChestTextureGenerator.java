@@ -1,5 +1,7 @@
 package com.leclowndu93150.notenoughchesttextures.resources;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import fr.iglee42.notenoughchests.NotEnoughChests;
 import fr.iglee42.notenoughchests.utils.ModAbbreviation;
 import net.mehvahdjukaar.moonlight.api.resources.pack.DynClientResourcesGenerator;
@@ -11,6 +13,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.InputStream;
+import java.io.InputStreamReader;
 
 
 public class ChestTextureGenerator extends DynClientResourcesGenerator {
@@ -48,30 +53,58 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
     }
 
     private void generateWoodTypeTextures(ResourceManager manager, ResourceLocation woodType) throws Exception {
-        ResourceLocation plankLoc = new ResourceLocation(woodType.getNamespace(),
-                "block/" + woodType.getPath() + "_planks");
+        ResourceLocation blockStateLoc = new ResourceLocation(woodType.getNamespace(),
+                "blockstates/" + woodType.getPath() + "_planks.json");
 
-        try (TextureImage plankTexture = TextureImage.open(manager, plankLoc)) {
-            Palette plankPalette = extractPlankPalette(plankTexture);
+        try (InputStream blockStateStream = manager.getResource(blockStateLoc).orElseThrow().open()) {
+            JsonObject blockState = JsonParser.parseReader(new InputStreamReader(blockStateStream)).getAsJsonObject();
 
-            for (String variant : VARIANTS) {
-                ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
-                        "textures/entity/chest/base/chest_" + variant + ".png");
+            String modelPath = blockState.getAsJsonObject("variants")
+                    .getAsJsonObject("")
+                    .get("model")
+                    .getAsString();
 
-                try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
-                    Respriter respriter = Respriter.of(baseImage);
-                    TextureImage recolored = respriter.recolor(plankPalette);
+            ResourceLocation modelLoc = new ResourceLocation(modelPath);
+            modelLoc = new ResourceLocation(modelLoc.getNamespace(),
+                    "models/" + modelLoc.getPath() + ".json");
 
-                    String targetPath = variant.contains("trapped") ?
-                            "chest_trapped_" + variant.replace("trapped_", "") :
-                            "chest_" + variant;
+            try (InputStream modelStream = manager.getResource(modelLoc).orElseThrow().open()) {
+                JsonObject model = JsonParser.parseReader(new InputStreamReader(modelStream)).getAsJsonObject();
+                String texturePath = model.getAsJsonObject("textures")
+                        .get("all")
+                        .getAsString();
 
-                    ResourceLocation targetLoc = new ResourceLocation("nec",
-                            "entity/chest/" + targetPath + "/" + ModAbbreviation.getChestTexture(woodType));
+                ResourceLocation textureLoc = new ResourceLocation(texturePath);
+                textureLoc = new ResourceLocation(textureLoc.getNamespace(),
+                        "textures/" + textureLoc.getPath() + ".png");
 
-                    this.dynamicPack.addAndCloseTexture(targetLoc, recolored);
+                try (TextureImage plankTexture = TextureImage.open(manager, textureLoc)) {
+                    Palette plankPalette = extractPlankPalette(plankTexture);
+
+                    for (String variant : VARIANTS) {
+                        ResourceLocation baseLoc = new ResourceLocation("minecraft",
+                                "textures/entity/chest/" + variant.replace("trapped_", "") + ".png");
+
+                        try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
+                            Respriter respriter = Respriter.of(baseImage);
+                            TextureImage recolored = respriter.recolor(plankPalette);
+
+                            String targetPath = variant.contains("trapped") ?
+                                    "chest_trapped_" + variant.replace("trapped_", "") :
+                                    "chest_" + variant;
+
+                            ResourceLocation targetLoc = new ResourceLocation("nec",
+                                    "entity/chest/" + targetPath + "/" + ModAbbreviation.getChestTexture(woodType));
+
+                            this.dynamicPack.addAndCloseTexture(targetLoc, recolored);
+                        }
+                    }
                 }
+            } catch (Exception e) {
+                LOGGER.error("Failed to process model file for " + woodType, e);
             }
+        } catch (Exception e) {
+            LOGGER.error("Failed to process blockstate file for " + woodType, e);
         }
     }
 
