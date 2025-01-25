@@ -11,12 +11,12 @@ import net.mehvahdjukaar.moonlight.api.resources.textures.Respriter;
 import net.mehvahdjukaar.moonlight.api.resources.textures.TextureImage;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
-
 
 public class ChestTextureGenerator extends DynClientResourcesGenerator {
     private static final Logger LOGGER = org.apache.logging.log4j.LogManager.getLogger("NECTextures");
@@ -28,6 +28,7 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
     private static ChestTextureGenerator INSTANCE;
 
     public static void init() {
+        if (INSTANCE != null) return;
         INSTANCE = new ChestTextureGenerator();
         INSTANCE.register();
     }
@@ -56,8 +57,9 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
         ResourceLocation blockStateLoc = new ResourceLocation(woodType.getNamespace(),
                 "blockstates/" + woodType.getPath() + "_planks.json");
 
-        try (InputStream blockStateStream = manager.getResource(blockStateLoc).orElseThrow().open()) {
-            JsonObject blockState = JsonParser.parseReader(new InputStreamReader(blockStateStream)).getAsJsonObject();
+        try (InputStream inputStream = manager.getResource(blockStateLoc).orElseThrow().open()) {
+            InputStreamReader reader = new InputStreamReader(inputStream);
+            JsonObject blockState = JsonParser.parseReader(reader).getAsJsonObject();
 
             String modelPath = blockState.getAsJsonObject("variants")
                     .getAsJsonObject("")
@@ -65,25 +67,30 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
                     .getAsString();
 
             ResourceLocation modelLoc = new ResourceLocation(modelPath);
-            modelLoc = new ResourceLocation(modelLoc.getNamespace(),
-                    "models/" + modelLoc.getPath() + ".json");
+            modelLoc = new ResourceLocation(modelLoc.getNamespace(), "models/" + modelLoc.getPath() + ".json");
 
-            try (InputStream modelStream = manager.getResource(modelLoc).orElseThrow().open()) {
-                JsonObject model = JsonParser.parseReader(new InputStreamReader(modelStream)).getAsJsonObject();
+            try (InputStream inputStream2 = manager.getResource(modelLoc).orElseThrow().open()) {
+                InputStreamReader reader2 = new InputStreamReader(inputStream2);
+                JsonObject model = JsonParser.parseReader(reader2).getAsJsonObject();
+
                 String texturePath = model.getAsJsonObject("textures")
                         .get("all")
                         .getAsString();
 
-                ResourceLocation textureLoc = new ResourceLocation(texturePath);
-                textureLoc = new ResourceLocation(textureLoc.getNamespace(),
-                        "textures/" + textureLoc.getPath() + ".png");
-
-                try (TextureImage plankTexture = TextureImage.open(manager, textureLoc)) {
+                ResourceLocation textureLocation = new ResourceLocation(texturePath);
+                try (TextureImage plankTexture = TextureImage.open(manager, textureLocation)) {
                     Palette plankPalette = extractPlankPalette(plankTexture);
 
                     for (String variant : VARIANTS) {
-                        ResourceLocation baseLoc = new ResourceLocation("minecraft",
-                                "textures/entity/chest/" + variant.replace("trapped_", "") + ".png");
+                        ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
+                                "textures/entity/chest/base/chest_" + variant.replace("trapped_", "") + ".png");
+
+                        /*
+                        if (!manager.getResource(baseLoc).isPresent()) {
+                            LOGGER.warn("Base chest texture not found: " + baseLoc);
+                            return;
+                        }
+                         */
 
                         try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
                             Respriter respriter = Respriter.of(baseImage);
@@ -100,11 +107,7 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
                         }
                     }
                 }
-            } catch (Exception e) {
-                LOGGER.error("Failed to process model file for " + woodType, e);
             }
-        } catch (Exception e) {
-            LOGGER.error("Failed to process blockstate file for " + woodType, e);
         }
     }
 
