@@ -60,7 +60,6 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
         try {
             plankTexture = TextureImage.open(manager, directPath);
         } catch (Exception e) {
-            // Try JSON parsing for custom paths
             ResourceLocation blockStateLoc = new ResourceLocation(woodType.getNamespace(),
                     "blockstates/" + woodType.getPath() + "_planks.json");
 
@@ -98,13 +97,35 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
                 ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
                         "entity/chest/base/chest_" + variant.replace("trapped_", ""));
 
-                manager.listResources("notenoughchesttextures/entity/chest/base",
-                                resource -> resource.getPath().endsWith(".png"))
-                        .forEach((loc, res) -> LOGGER.info("Found texture: {}", loc));
-
                 try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
+                    // Save original lock pixels
+                    TextureImage lockTexture = TextureImage.createNew(6, 5);
+                    for(int x = 0; x < 6; x++) {
+                        for(int y = 0; y < 5; y++) {
+                            lockTexture.setFramePixel(0, x, y, baseImage.getFramePixel(0, x, y));
+                        }
+                    }
+
+                    TextureImage lockMask = TextureImage.createNew(64, 64);
+                    lockMask.forEachFramePixel((frame, x, y) -> {
+                        if (x < 6 && y < 5) {
+                            lockMask.setFramePixel(frame, x, y, 0xFF000000); // Black = exclude from tinting
+                        } else {
+                            lockMask.setFramePixel(frame, x, y, 0); // Transparent = apply tinting
+                        }
+                    });
+
                     Respriter respriter = Respriter.of(baseImage);
                     TextureImage recolored = respriter.recolor(plankPalette);
+                    recolored.crop(lockMask);
+
+                    // Restore lock pixels
+                    for(int x = 0; x < 6; x++) {
+                        for(int y = 0; y < 5; y++) {
+                            recolored.setFramePixel(0, x, y, lockTexture.getFramePixel(0, x, y));
+                        }
+                    }
+                    lockTexture.close();
 
                     String targetPath = variant.contains("trapped") ?
                             "chest_trapped_" + variant.replace("trapped_", "") :
