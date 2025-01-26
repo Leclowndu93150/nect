@@ -11,7 +11,6 @@ import net.mehvahdjukaar.moonlight.api.resources.textures.Respriter;
 import net.mehvahdjukaar.moonlight.api.resources.textures.TextureImage;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.Pack;
-import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,62 +53,74 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
     }
 
     private void generateWoodTypeTextures(ResourceManager manager, ResourceLocation woodType) throws Exception {
-        ResourceLocation blockStateLoc = new ResourceLocation(woodType.getNamespace(),
-                "blockstates/" + woodType.getPath() + "_planks.json");
+        TextureImage plankTexture = null;
+        ResourceLocation directPath = new ResourceLocation(woodType.getNamespace(),
+                "textures/block/" + woodType.getPath() + "_planks.png");
 
-        try (InputStream inputStream = manager.getResource(blockStateLoc).orElseThrow().open()) {
-            InputStreamReader reader = new InputStreamReader(inputStream);
-            JsonObject blockState = JsonParser.parseReader(reader).getAsJsonObject();
+        try {
+            plankTexture = TextureImage.open(manager, directPath);
+        } catch (Exception e) {
+            // Try JSON parsing for custom paths
+            ResourceLocation blockStateLoc = new ResourceLocation(woodType.getNamespace(),
+                    "blockstates/" + woodType.getPath() + "_planks.json");
 
-            String modelPath = blockState.getAsJsonObject("variants")
-                    .getAsJsonObject("")
-                    .get("model")
-                    .getAsString();
-
-            ResourceLocation modelLoc = new ResourceLocation(modelPath);
-            modelLoc = new ResourceLocation(modelLoc.getNamespace(), "models/" + modelLoc.getPath() + ".json");
-
-            try (InputStream inputStream2 = manager.getResource(modelLoc).orElseThrow().open()) {
-                InputStreamReader reader2 = new InputStreamReader(inputStream2);
-                JsonObject model = JsonParser.parseReader(reader2).getAsJsonObject();
-
-                String texturePath = model.getAsJsonObject("textures")
-                        .get("all")
+            try (InputStream inputStream = manager.getResource(blockStateLoc).orElseThrow().open()) {
+                JsonObject blockState = JsonParser.parseReader(new InputStreamReader(inputStream)).getAsJsonObject();
+                String modelPath = blockState.getAsJsonObject("variants")
+                        .getAsJsonObject("")
+                        .get("model")
                         .getAsString();
 
-                ResourceLocation textureLocation = new ResourceLocation(texturePath);
-                try (TextureImage plankTexture = TextureImage.open(manager, textureLocation)) {
-                    Palette plankPalette = extractPlankPalette(plankTexture);
+                ResourceLocation modelLoc = new ResourceLocation(modelPath);
+                modelLoc = new ResourceLocation(modelLoc.getNamespace(), "models/" + modelLoc.getPath() + ".json");
 
-                    for (String variant : VARIANTS) {
-                        ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
-                                "textures/entity/chest/base/chest_" + variant.replace("trapped_", "") + ".png");
+                try (InputStream modelStream = manager.getResource(modelLoc).orElseThrow().open()) {
+                    JsonObject model = JsonParser.parseReader(new InputStreamReader(modelStream)).getAsJsonObject();
+                    String texturePath = model.getAsJsonObject("textures")
+                            .get("all")
+                            .getAsString();
 
-                        manager.listResources("textures/entity/chest/base", file -> file.getPath().endsWith(".png"))
-                                .forEach((loc, res) -> LOGGER.info("Found resource: {}", loc));
-
-                        /*
-                        if (!manager.getResource(baseLoc).isPresent()) {
-                            LOGGER.warn("Base chest texture not found: " + baseLoc);
-                            return;
-                        }
-                         */
-
-                        try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
-                            Respriter respriter = Respriter.of(baseImage);
-                            TextureImage recolored = respriter.recolor(plankPalette);
-
-                            String targetPath = variant.contains("trapped") ?
-                                    "chest_trapped_" + variant.replace("trapped_", "") :
-                                    "chest_" + variant;
-
-                            ResourceLocation targetLoc = new ResourceLocation("nec",
-                                    "entity/chest/" + targetPath + "/" + ModAbbreviation.getChestTexture(woodType));
-
-                            this.dynamicPack.addAndCloseTexture(targetLoc, recolored);
-                        }
-                    }
+                    ResourceLocation textureLocation = new ResourceLocation(texturePath);
+                    plankTexture = TextureImage.open(manager, textureLocation);
                 }
+            }
+        }
+
+        if (plankTexture == null) {
+            LOGGER.error("Could not find plank texture for " + woodType);
+            return;
+        }
+
+        try {
+            Palette plankPalette = extractPlankPalette(plankTexture);
+
+            for (String variant : VARIANTS) {
+                ResourceLocation baseLoc = new ResourceLocation("notenoughchesttextures",
+                        "entity/chest/base/chest_" + variant.replace("trapped_", ""));
+
+                manager.listResources("notenoughchesttextures/entity/chest/base",
+                                resource -> resource.getPath().endsWith(".png"))
+                        .forEach((loc, res) -> LOGGER.info("Found texture: {}", loc));
+
+                try (TextureImage baseImage = TextureImage.open(manager, baseLoc)) {
+                    Respriter respriter = Respriter.of(baseImage);
+                    TextureImage recolored = respriter.recolor(plankPalette);
+
+                    String targetPath = variant.contains("trapped") ?
+                            "chest_trapped_" + variant.replace("trapped_", "") :
+                            "chest_" + variant;
+
+                    ResourceLocation targetLoc = new ResourceLocation("nec",
+                            "entity/chest/" + targetPath + "/" + ModAbbreviation.getChestTexture(woodType));
+
+                    this.dynamicPack.addAndCloseTexture(targetLoc, recolored);
+                } catch (Exception e) {
+                    LOGGER.error("Failed to process variant " + variant + " for " + woodType, e);
+                }
+            }
+        } finally {
+            if (plankTexture != null) {
+                plankTexture.close();
             }
         }
     }
@@ -117,7 +128,9 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
     private static Palette extractPlankPalette(TextureImage plankTexture) {
         Palette palette = Palette.fromImage(plankTexture);
         palette.remove(palette.getDarkest());
-        palette.increaseUp();
+        if (palette.getLuminanceSpan() < 0.2) {
+            palette.increaseUp();
+        }
         palette.increaseInner();
         palette.reduceAndAverage();
         return palette;
@@ -130,6 +143,6 @@ public class ChestTextureGenerator extends DynClientResourcesGenerator {
 
     @Override
     public boolean dependsOnLoadedPacks() {
-        return false;
+        return true;
     }
 }

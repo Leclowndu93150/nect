@@ -144,7 +144,7 @@ dependencies {
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    implementation fg.deobf("curse.maven:selene-499980:6115056")
+    implementation fg.deobf("curse.maven:selene-499980:6034621")
     implementation fg.deobf("curse.maven:not-enough-chest-917165:6027408")
     runtimeOnly fg.deobf("curse.maven:iglee-library-541199:5329230")
     runtimeOnly fg.deobf("curse.maven:blue-skies-312918:5010316")
